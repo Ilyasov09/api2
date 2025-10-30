@@ -6,6 +6,8 @@ from bs4 import BeautifulSoup
 from moviepy.editor import VideoFileClip
 import uuid
 import shutil
+from flask import Flask
+from threading import Thread
 
 # 🔐 Tokenni environment variable'dan olish
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -17,6 +19,7 @@ if not BOT_TOKEN or ":" not in BOT_TOKEN:
     )
 
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML")
+app = Flask(__name__)
 
 # Global o‘zgaruvchilar
 video_file = None
@@ -132,5 +135,18 @@ def callback(call):
                 shutil.rmtree(folder_name, ignore_errors=True)
 
 
-print("🤖 Pinterest bot ishga tushdi...")
-bot.infinity_polling(skip_pending=True)
+# 🔹 Flask web route (Render “alive” deb bilishi uchun)
+@app.route("/")
+def home():
+    return "✅ Pinterest Telegram bot is running on Render!"
+
+
+# 🔹 Botni alohida threadda ishga tushirish
+def run_bot():
+    print("🤖 Pinterest bot ishga tushdi...")
+    bot.infinity_polling(skip_pending=True)
+
+
+if __name__ == "__main__":
+    Thread(target=run_bot).start()
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))

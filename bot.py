@@ -1,14 +1,23 @@
 import telebot
+from telebot import types
 import requests
 from bs4 import BeautifulSoup
+from moviepy.editor import VideoFileClip
+import uuid
+import os
+import shutil
 
-# 🧩 Telegram bot token (BotFather dan olgan tokeningni shu yerga yoz)
-BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
-
+# 🔐 Bot token
+BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML")
 
-# 🔍 Pinterest dan rasm/video URL ni olish funksiyasi
-def get_pinterest_media(url: str):
+# Global o‘zgaruvchilar
+video_file = None
+folder_name = None
+
+
+def get_pinterest_video(url: str):
+    """Pinterest post sahifasidan video URL ni olish"""
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -21,54 +30,100 @@ def get_pinterest_media(url: str):
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
 
-        # 🎬 Video bo‘lsa
+        # Pinterest video linkini topamiz
         video_tag = soup.find("video")
         if video_tag and video_tag.get("src"):
-            return ("video", video_tag["src"])
+            return video_tag["src"]
 
-        # 🖼️ Rasm bo‘lsa
-        meta_img = soup.find("meta", property="og:image")
-        if meta_img and meta_img.get("content"):
-            return ("image", meta_img["content"])
+        meta_tag = soup.find("meta", property="og:video")
+        if meta_tag and meta_tag.get("content"):
+            return meta_tag["content"]
 
-        return (None, None)
+        return None
     except Exception as e:
         print("Xato:", e)
-        return (None, None)
+        return None
 
-# 👋 /start komandasi
-@bot.message_handler(commands=["start", "help"])
-def send_welcome(message):
+
+@bot.message_handler(commands=["start"])
+def start(message):
     bot.reply_to(
         message,
         f"Salom, <b>{message.from_user.first_name}</b> 👋\n"
         "Men <b>Pinterest Downloader Bot</b>man!\n"
-        "Menga Pinterest link yubor — men esa rasm yoki videoni yuboraman 📥"
+        "Menga Pinterest havolasini yubor — men video va audio tayyorlab beraman 🎬🎵",
     )
 
-# 📎 Foydalanuvchi yuborgan Pinterest linkni qayta ishlash
+
 @bot.message_handler(func=lambda message: True)
 def handle_link(message):
+    global video_file, folder_name
     url = message.text.strip()
+
     if "pinterest.com" not in url:
         bot.reply_to(message, "Iltimos, Pinterest havolasini yuboring 🔗")
         return
 
-    bot.send_chat_action(message.chat.id, "typing")
-    bot.reply_to(message, "🔎 Yuklanmoqda, biroz kuting...")
+    loader_msg = bot.send_message(message.chat.id, "⏳ Video yuklanmoqda, biroz kuting...")
 
-    media_type, media_url = get_pinterest_media(url)
-    if not media_url:
-        bot.reply_to(message, "❌ Media topilmadi yoki yuklab bo‘lmadi.")
-        return
+    try:
+        # Video linkni olish
+        video_url = get_pinterest_video(url)
+        if not video_url:
+            bot.delete_message(message.chat.id, loader_msg.message_id)
+            bot.reply_to(message, "❌ Video topilmadi.")
+            return
 
-    if media_type == "video":
-        bot.send_video(message.chat.id, media_url, caption="🎬 Pinterest videosi")
-    elif media_type == "image":
-        bot.send_photo(message.chat.id, media_url, caption="🖼️ Pinterest rasmi")
-    else:
-        bot.reply_to(message, "❌ Media formati noma'lum.")
+        # Fayl nomi
+        folder_name = str(uuid.uuid4())
+        os.makedirs(folder_name, exist_ok=True)
+        video_file = os.path.join(folder_name, "video.mp4")
 
-# ▶️ Botni ishga tushirish
-print("🤖 Bot ishga tushdi...")
+        # Video yuklab olish
+        with requests.get(video_url, stream=True) as r:
+            with open(video_file, "wb") as f:
+                shutil.copyfileobj(r.raw, f)
+
+        bot.delete_message(message.chat.id, loader_msg.message_id)
+
+        # Inline tugma — audio yuklash
+        markup = types.InlineKeyboardMarkup()
+        btn = types.InlineKeyboardButton("🎵 Audioni yuklab olish", callback_data="get_audio")
+        markup.add(btn)
+
+        with open(video_file, "rb") as v:
+            bot.send_video(message.chat.id, v, caption="🎬 Pinterest videosi", reply_markup=markup)
+
+    except Exception as e:
+        bot.delete_message(message.chat.id, loader_msg.message_id)
+        bot.reply_to(message, f"⚠️ Xatolik yuz berdi: {e}")
+
+
+@bot.callback_query_handler(func=lambda call: True)
+def callback(call):
+    global video_file, folder_name
+    if call.data == "get_audio":
+        try:
+            bot.send_message(call.message.chat.id, "🎧 Audioni ajratib olayapman...")
+
+            video = VideoFileClip(video_file)
+            audio = video.audio
+            audio_name = os.path.join(folder_name, f"{uuid.uuid4()}.mp3")
+            audio.write_audiofile(audio_name)
+            video.close()
+
+            with open(audio_name, "rb") as a:
+                bot.send_audio(call.message.chat.id, a, caption="🎵 Pinterest audiosi")
+
+            os.remove(audio_name)
+
+        except Exception as e:
+            bot.reply_to(call.message, f"⚠️ Audio ajratishda xatolik: {e}")
+
+        finally:
+            if os.path.exists(folder_name):
+                shutil.rmtree(folder_name, ignore_errors=True)
+
+
+print("🤖 Pinterest bot ishga tushdi...")
 bot.infinity_polling()

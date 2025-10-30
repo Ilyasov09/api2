@@ -8,7 +8,7 @@ import os
 import shutil
 
 # 🔐 Bot token
-BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+BOT_TOKEN = "8230129134:AAGM47sildj89zqT_bm2aPHSGcbLXOvuMa0"
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML")
 
 # Global o‘zgaruvchilar
@@ -127,3 +127,4 @@ def callback(call):
 
 print("🤖 Pinterest bot ishga tushdi...")
 bot.infinity_polling()
+

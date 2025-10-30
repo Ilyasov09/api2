@@ -1,14 +1,21 @@
+import os
 import telebot
 from telebot import types
 import requests
 from bs4 import BeautifulSoup
 from moviepy.editor import VideoFileClip
 import uuid
-import os
 import shutil
 
-# 🔐 Bot token
-BOT_TOKEN = "8230129134:AAGM47sildj89zqT_bm2aPHSGcbLXOvuMa0"
+# 🔐 Tokenni environment variable'dan olish
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+if not BOT_TOKEN or ":" not in BOT_TOKEN:
+    raise ValueError(
+        "❌ BOT_TOKEN topilmadi yoki noto‘g‘ri formatda! "
+        "Render environment variables’da BOT_TOKEN ni to‘g‘ri yozing."
+    )
+
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML")
 
 # Global o‘zgaruvchilar
@@ -109,7 +116,7 @@ def callback(call):
             video = VideoFileClip(video_file)
             audio = video.audio
             audio_name = os.path.join(folder_name, f"{uuid.uuid4()}.mp3")
-            audio.write_audiofile(audio_name)
+            audio.write_audiofile(audio_name, verbose=False, logger=None)
             video.close()
 
             with open(audio_name, "rb") as a:
@@ -126,5 +133,4 @@ def callback(call):
 
 
 print("🤖 Pinterest bot ishga tushdi...")
-bot.infinity_polling()
-
+bot.infinity_polling(skip_pending=True)

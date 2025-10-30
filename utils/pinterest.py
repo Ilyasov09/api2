@@ -2,9 +2,6 @@ import httpx
 from bs4 import BeautifulSoup
 
 async def download_pinterest_media(url: str):
-    """
-    Pinterest post yoki boarddan rasm va videolarni olish
-    """
     async with httpx.AsyncClient() as client:
         r = await client.get(url)
         if r.status_code != 200:
